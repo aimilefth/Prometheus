@@ -18,7 +18,7 @@ import utilities
 import splitKernel
 import ressources 
 
-AMPL_CMD = "/home/aleftheriotis/Documents/Prometheus/ampl/ampl.linux-intel64/ampl"
+AMPL_CMD = "/home/ampl/ampl.linux-intel64/ampl"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Code Generation")
