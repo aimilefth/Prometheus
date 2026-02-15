@@ -30,8 +30,8 @@ docker pull ghcr.io/ucla-vast/pocc:latest
 ### 2. Example Usage
 
 ```bash
-python main.py \
-  --file examples/gemm.c \
+python3 main.py \
+  --file cfile/gemm_test.c \
   --vitis \
   --csim \
   --SLR 3 \

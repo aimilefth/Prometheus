@@ -6,7 +6,7 @@ import analysis
 import itertools
 
 
-ISCC_CMD = "/opt/polyopt/default/sources/polyopt-hls/pocc/math/barvinok/iscc"
+ISCC_CMD = "/opt/pocc/math/barvinok/iscc"
 # ISCC_CMD = "apptainer exec /opt/public/apptainer/pocc/pocc.sif iscc"
 
 class ISCC:

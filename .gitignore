@@ -1,0 +1,5 @@
+output_dir
+ampl
+get_code_in_txt.py
+__pycache__
+*.png
