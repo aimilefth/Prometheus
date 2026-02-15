@@ -32,13 +32,8 @@ docker pull ghcr.io/ucla-vast/pocc:latest
 ```bash
 python3 main.py \
   --file cfile/gemm_test.c \
-  --vitis \
-  --csim \
-  --SLR 3 \
+  --SLR 1 \
   --DSP 1440 \
-  --MAX_BUFFER_SIZE 512 \
-  --ON_CHIP_MEM_SIZE 8192 \
-  --MAX_UF 32 \
   --code_generation \
   --folder output_dir
 ```
