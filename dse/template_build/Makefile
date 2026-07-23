@@ -45,7 +45,7 @@ SYSROOT      ?= $(SYSROOT_PATH)/sysroots/cortexa72-cortexa53-xilinx-linux
 
 
 # Kernel / Host naming
-KERNEL_NAME ?= gemm
+KERNEL_NAME ?= kernel_nlp
 
 KERNEL_DIR  ?= src
 HOST_DIR    ?= benchmark_host
@@ -348,7 +348,7 @@ report:
 	@mkdir -p .report_backup/$(TEMP_DIR)/link/int
 	@mkdir -p .report_backup/$(TEMP_DIR)/$(KERNEL_NAME)/$(KERNEL_NAME)/$(KERNEL_NAME)/solution/syn/report
 
-	@# 2) Backup gemm.xclbin (both root and build_dir versions) and gemm_host.exe
+	@# 2) Backup kernel_nlp.xclbin (both root and build_dir versions) and kernel_nlp_host.exe
 	@cp -a $(KERNEL_NAME).xclbin .report_backup/ 2>/dev/null || true
 	@mkdir -p .report_backup/$(BUILD_DIR)
 	@cp -a $(FINAL_XCLBIN) .report_backup/$(BUILD_DIR)/ 2>/dev/null || true
@@ -361,14 +361,14 @@ report:
 	@cp -a $(EMCONFIG_DIR)/emconfig.json .report_backup/$(TEMP_DIR)/ 2>/dev/null || true
 	@# ---> MINIMAL ADDITIONS END HERE
 
-	@# 3) Backup v++_gemm*.log outputs
+	@# 3) Backup v++_kernel_nlp*.log outputs
 	@cp -a v++_$(KERNEL_NAME)*.log .report_backup/ 2>/dev/null || true
 
 	@# 4a & 4b) Backup the entire reports and logs directory in _x...
 	@cp -a -r $(TEMP_DIR)/reports .report_backup/$(TEMP_DIR)/ 2>/dev/null || true
 	@cp -a -r $(TEMP_DIR)/logs .report_backup/$(TEMP_DIR)/ 2>/dev/null || true
 
-	@# 4c) Backup gemm.xclbin.info
+	@# 4c) Backup kernel_nlp.xclbin.info
 	@cp -a $(TEMP_DIR)/link/int/$(KERNEL_NAME).xclbin.info .report_backup/$(TEMP_DIR)/link/int/ 2>/dev/null || true
 
 	@# 4d) Backup csynth_design_size.rpt and csynth.rpt

@@ -1,115 +1,150 @@
-#include "host_gemm_fpga.h"
-#include <iostream>
-#include <vector>
-#include <cstdlib>
+#include "host_visible.h"
+
+#include <xrt/xrt_bo.h>
+#include <xrt/xrt_device.h>
+#include <xrt/xrt_kernel.h>
+
+#include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
+#include <iostream>
+#include <string>
 
-inline void host_serialize_A(float *A_to, float *A_from){
-  unsigned int cnt = 0;
-  for (int c0 = 0; c0 < TI; c0 += 1)
-    for (int c2 = 0; c2 < TK; c2 += 1)
-      for (int c3 = 0; c3 < apI; c3 += 1)
-        for (int c5 = 0; c5 < apK; c5 += 1)
-          A_to[cnt++] = A_from[(apI * c0 + c3) * GEMM_K + (apK * c2 + c5)];
-}
+using std::abs;
 
-inline void host_serialize_B(float *B_to, float *B_from) {
-  unsigned int cnt = 0;
-  for (int c1 = 0; c1 < TJ; c1 += 1)
-    for (int c2 = 0; c2 < TK; c2 += 1)
-      for (int c4 = 0; c4 < apK; c4 += 1)
-        for (int c3 = 0; c3 < apJ; c3 += 1)
-          B_to[cnt++] = B_from[(apK * c2 + c4) * GEMM_J + (apJ * c1 + c3)];
-}
-
-// Inverted logic: Takes the hardware's flat block-stream output and maps it back to standard 2D layout
-inline void host_deserialize_C(float *C_to_2d, const float *C_from_hw) {
-  unsigned int cnt = 0;
-  for (int c0 = 0; c0 < TI; c0 += 1)
-    for (int c1 = 0; c1 < TJ; c1 += 1)
-      for (int c4 = 0; c4 < apI; c4 += 1)
-        for (int c3 = 0; c3 < apJ; c3 += 1) {
-          int row = apI * c0 + c4;
-          int col = apJ * c1 + c3;
-          C_to_2d[row * GEMM_J + col] = C_from_hw[cnt++];
-        }
-}
-
-int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::cerr << "Usage:\n  " << argv[0] << " <xclbin_path> [device_index] [iterations]" << std::endl;
-        return 1;
+/*
+ * CPU reference implementation.
+ *
+ * GEMM dimensions are updated by gemm_dse.py in host/host_visible.h:
+ *
+ *   GEMM_I: number of rows in A and C
+ *   GEMM_J: number of columns in B and C
+ *   GEMM_K: reduction dimension
+ */
+static void kernel_gemm(float A[GEMM_I][GEMM_K],
+                        float B[GEMM_K][GEMM_J],
+                        float C[GEMM_I][GEMM_J]) {
+  for (int i = 0; i < GEMM_I; ++i) {
+    for (int j = 0; j < GEMM_J; ++j) {
+      C[i][j] = 0.0f;
     }
+  }
 
+  for (int i = 0; i < GEMM_I; ++i) {
+    for (int k = 0; k < GEMM_K; ++k) {
+      for (int j = 0; j < GEMM_J; ++j) {
+        C[i][j] += A[i][k] * B[k][j];
+      }
+    }
+  }
+}
+
+int main(int argc, char *argv[]) {
+  if (argc != 2) {
+    std::cerr << "Usage: " << argv[0] << " <kernel.xclbin>\n";
+    return EXIT_FAILURE;
+  }
+
+  try {
     const std::string xclbin_path = argv[1];
-    const unsigned device_index = (argc >= 3) ? (unsigned)std::stoul(argv[2]) : 0;
-    const unsigned iterations  = (argc >= 4) ? (unsigned)std::stoul(argv[3]) : 1;
 
-    std::vector<float> A_rm(GEMM_A_SIZE);
-    std::vector<float> B_rm(GEMM_B_SIZE);
-    std::vector<float> C_gold_rm(GEMM_C_SIZE, 0.0f);
+    std::printf("Preparing GEMM %d x %d x %d\n",
+                GEMM_I, GEMM_J, GEMM_K);
 
-    // Init matrices directly into host vectors
-    for (int i = 0; i < GEMM_A_SIZE; ++i) A_rm[i] = (float)std::rand() / RAND_MAX;
-    for (int i = 0; i < GEMM_B_SIZE; ++i) B_rm[i] = (float)std::rand() / RAND_MAX;
+    // Keep input generation repeatable across DSE points.
+    std::srand(0);
 
-    // Compute Golden C Reference
-    for (int i = 0; i < GEMM_I; ++i) {
-        for (int j = 0; j < GEMM_J; ++j) {
-            float sum = 0.0f;
-            for (int k = 0; k < GEMM_K; ++k) {
-                sum += A_rm[i * GEMM_K + k] * B_rm[k * GEMM_J + j];
-            }
-            C_gold_rm[i * GEMM_J + j] = sum;
-        }
-    }
+    /*
+     * gemm_dse.py replaces this block with the initialization,
+     * padding, tiling, and serialization code extracted from Prometheus's
+     * generated src/host.cpp.
+     *
+     * The inserted code declares and initializes:
+     *
+     *   A_ori
+     *   B_ori
+     *   C_ori
+     *   A_new_0
+     *   B_new_0
+     *   C_new_0
+     *   C_new_before_trans_0
+     */
+    // PROMETHEUS_DSE_BEGIN_DATA_LAYOUT
+    // Replaced by gemm_dse.py.
+    // PROMETHEUS_DSE_END_DATA_LAYOUT
 
-    FPGA_GEMM fpga;
-    if (fpga.fpga_init(xclbin_path, device_index) != 0) {
-        std::cerr << "FPGA init failed." << std::endl;
-        return 1;
-    }
+    /*
+     * The template uses the standard Prometheus interface:
+     *
+     *   kernel_nlp(C, A, B)
+     */
+    xrt::device device(0);
+    const auto uuid = device.load_xclbin(xclbin_path);
+    xrt::kernel kernel(device, uuid, "kernel_nlp");
 
-    // Serialize inputs directly into XRT mapped BO memory
-    host_serialize_A(fpga.get_inA_ptr(), A_rm.data());
-    host_serialize_B(fpga.get_inB_ptr(), B_rm.data());
+    /*
+     * Prometheus argument ordering:
+     *
+     *   argument 0: C
+     *   argument 1: A
+     *   argument 2: B
+     */
+    xrt::bo buffer_c(device, sizeof(C_new_0), kernel.group_id(0));
+    xrt::bo buffer_a(device, sizeof(A_new_0), kernel.group_id(1));
+    xrt::bo buffer_b(device, sizeof(B_new_0), kernel.group_id(2));
 
-    // Optional warmup
-    fpga.warmup(1);
+    buffer_a.write(A_new_0, sizeof(A_new_0));
+    buffer_b.write(B_new_0, sizeof(B_new_0));
 
-    // Run Kernel
-    for (unsigned i = 0; i < iterations; ++i) {
-        fpga.run();
-    }
+    /*
+     * C is overwritten by the kernel. It is initialized here to keep
+     * hardware and software emulation behavior deterministic.
+     */
+    buffer_c.write(C_new_0, sizeof(C_new_0));
 
-    // Deserialize the hardware result back into standard 2D matrix formatting
-    const float* outC = fpga.get_outC_ptr();
-    std::vector<float> C_unserialized(GEMM_C_SIZE);
-    host_deserialize_C(C_unserialized.data(), outC);
+    buffer_a.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+    buffer_b.sync(XCL_BO_SYNC_BO_TO_DEVICE);
+    buffer_c.sync(XCL_BO_SYNC_BO_TO_DEVICE);
 
-    bool pass = true;
-    const float tol = 0.001f;
-    std::size_t mismatches = 0;
-    
-    // Compare standard 2D coordinates (flat 1D arrays ordered naturally)
-    for (std::size_t i = 0; i < GEMM_C_SIZE; ++i) {
-        float diff = std::fabs(C_unserialized[i] - C_gold_rm[i]);
-        if (diff > tol) {
-            pass = false;
-            ++mismatches;
-        }
-    }
+    std::printf("Launching kernel_nlp(C, A, B)...\n");
 
-    std::cout << "Total mismatches (absdiff > " << tol << "): " << mismatches << std::endl;
+    const auto start = std::chrono::steady_clock::now();
 
-    fpga.print_performance_timings();
-    fpga.save_results_to_csv("benchmark_results.csv");
+    auto run = kernel(buffer_c, buffer_a, buffer_b);
+    run.wait();
 
-    if (!pass) {
-        std::cerr << "FAILED" << std::endl;
-        return 1;
-    }
+    const auto stop = std::chrono::steady_clock::now();
 
-    std::cout << "PASSED" << std::endl;
-    return 0;
+    buffer_c.sync(XCL_BO_SYNC_BO_FROM_DEVICE);
+    buffer_c.read(C_new_0, sizeof(C_new_0));
+
+    /*
+     * gemm_dse.py replaces this block with:
+     *
+     *   1. Prometheus's C output de-serialization
+     *   2. CPU kernel_gemm invocation
+     *   3. Element-by-element result verification
+     *
+     * It must appear after C_new_0 has been copied from the FPGA.
+     */
+    // PROMETHEUS_DSE_BEGIN_RESULT_LAYOUT
+    // Replaced by gemm_dse.py.
+    // PROMETHEUS_DSE_END_RESULT_LAYOUT
+
+    const std::chrono::duration<double> elapsed = stop - start;
+
+    std::printf("C-simulation passed!\n");
+    std::cout << "Kernel execution time: "
+              << elapsed.count()
+              << " seconds\n";
+
+    return EXIT_SUCCESS;
+  } catch (const std::exception &error) {
+    std::cerr << "Host execution failed: "
+              << error.what()
+              << '\n';
+    return EXIT_FAILURE;
+  }
 }

@@ -17,7 +17,7 @@ int FPGA_GEMM::fpga_init(const std::string& xclbin_path, const unsigned int devi
     auto uuid = device.load_xclbin(xclbin_path);
 
     // Kernel name must match the HLS top function: "gemm"
-    gemm_kernel = xrt::kernel(device, uuid, "gemm");
+    gemm_kernel = xrt::kernel(device, uuid, "kernel_nlp");
 
     auto end_program = clock::now();
     time_program_fpga = end_program - start;
@@ -32,9 +32,10 @@ int FPGA_GEMM::fpga_init(const std::string& xclbin_path, const unsigned int devi
     const std::size_t B_BYTES = B_ELEMS * sizeof(float);
     const std::size_t C_BYTES = C_ELEMS * sizeof(float);
 
-    inA_bo  = xrt::bo(device, A_BYTES, gemm_kernel.group_id(0));
-    inB_bo  = xrt::bo(device, B_BYTES, gemm_kernel.group_id(1));
-    outC_bo = xrt::bo(device, C_BYTES, gemm_kernel.group_id(2));
+    // Change due to Prometheus ordering
+    inA_bo  = xrt::bo(device, A_BYTES, gemm_kernel.group_id(1));
+    inB_bo  = xrt::bo(device, B_BYTES, gemm_kernel.group_id(2));
+    outC_bo = xrt::bo(device, C_BYTES, gemm_kernel.group_id(0));
 
     inA_host_ptr  = inA_bo.map<float*>();
     inB_host_ptr  = inB_bo.map<float*>();
@@ -54,9 +55,9 @@ int FPGA_GEMM::fpga_init(const std::string& xclbin_path, const unsigned int devi
     }
 
     run_gemm = xrt::run(gemm_kernel);
-    run_gemm.set_arg(0, inA_bo);
-    run_gemm.set_arg(1, inB_bo);
-    run_gemm.set_arg(2, outC_bo);
+    run_gemm.set_arg(1, inA_bo);
+    run_gemm.set_arg(2, inB_bo);
+    run_gemm.set_arg(0, outC_bo);
 
     auto end_alloc = clock::now();
     time_allocate_buffers = end_alloc - start_alloc;
