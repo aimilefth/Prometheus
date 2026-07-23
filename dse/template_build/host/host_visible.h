@@ -1,16 +1,6 @@
-// host/host_visible.h
-#ifndef HOST_HOST_VISIBLE_WRAPPER_H
-#define HOST_HOST_VISIBLE_WRAPPER_H
+// Filled from gemm_dse.py for GEMM_I/J/K
 
-#include "../src/host_visible.h"
-
-// Compatibility aliases for host code
-#define apI AP_I
-#define apJ AP_J
-#define apK AP_K
-
-#define TI num_tiles_I
-#define TJ num_tiles_J
-#define TK num_tiles_K
-
-#endif
+// Buffer sizes (float elements)
+#define GEMM_A_SIZE (GEMM_I*GEMM_K)
+#define GEMM_B_SIZE (GEMM_K*GEMM_J)
+#define GEMM_C_SIZE (GEMM_I*GEMM_J)

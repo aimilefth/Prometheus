@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Capture host user ID and group ID
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+
 # 1. Load UUID from .env (if present)
 # Create a file named .env in the same folder as this script
 # and add: AMPL_UUID=your-uuid-here
@@ -21,6 +25,8 @@ echo "Starting Docker container..."
 docker run --rm -it \
   -v "$(pwd)":/home \
   -w /home \
+  -e HOST_UID="${HOST_UID}" \
+  -e HOST_GID="${HOST_GID}" \
   -e AMPL_UUID="${AMPL_UUID:-}" \
   -e AMPL_LICFILE="${AMPL_DIR_CONT}/ampl.lic" \
   aimilefth/ucla_prometheus:latest \

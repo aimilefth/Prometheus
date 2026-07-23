@@ -3,7 +3,7 @@
 
 One-time template assumptions:
   * HLS top: kernel_nlp
-  * HLS files: src/output.cpp and src/output_2.h
+  * HLS files: src/kernel_nlp.cpp and src/output_2.h
   * kernel argument order: C, A, B
   * Makefile, hls.cfg, system.cfg, Tcl, and XRT code already use that interface
 
@@ -27,6 +27,7 @@ kernel result has been copied back into C_new_0.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shlex
 import shutil
@@ -42,6 +43,26 @@ TEMPLATE_DIR = DSE_DIR / "template_build"
 INPUT_DIR = DSE_DIR / "inputs"
 PROMETHEUS_OUTPUT_DIR = DSE_DIR / "generated"
 BUILD_DIR = DSE_DIR / "builds"
+
+# Host ownership permissions passed via docker_run.sh
+HOST_UID = os.environ.get("HOST_UID")
+HOST_GID = os.environ.get("HOST_GID")
+
+
+def fix_permissions(path: Path) -> None:
+    """Change ownership of target path/directory recursively back to the host user."""
+    if not path.exists() or not HOST_UID or not HOST_GID:
+        return
+    try:
+        subprocess.run(
+            ["chown", "-R", f"{HOST_UID}:{HOST_GID}", str(path)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        print(f"[gemm-dse] Warning: permissions fix failed for {path}: {exc}", file=sys.stderr)
+
 
 # ---------------------------------------------------------------------------
 # DSE configuration
@@ -101,7 +122,7 @@ def make_input_kernel(point: tuple[int, int, int]) -> str:
 
           for (i = 0; i < {i_size}; ++i) {{
             for (j = 0; j < {j_size}; ++j) {{
-              C[i][j] = 0.0f;
+              C[i][j] = 0.0;
             }}
           }}
 
@@ -274,7 +295,9 @@ def create_build(
 
     src_dir = build_dir / "src"
     src_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(prometheus_output / "src" / "output.cpp", src_dir / "output.cpp")
+    
+    # Copy output.cpp as kernel_nlp.cpp into build_dir
+    shutil.copy2(prometheus_output / "src" / "output.cpp", src_dir / "kernel_nlp.cpp")
     shutil.copy2(prometheus_output / "src" / "output_2.h", src_dir / "output_2.h")
 
     update_host_visible(build_dir / "host" / "host_visible.h", point)
@@ -360,6 +383,14 @@ def main() -> int:
                 break
 
             continue
+        finally:
+            # Fix permissions for all created paths for this matrix point
+            fix_permissions(INPUT_DIR / f"{name}.c")
+            fix_permissions(PROMETHEUS_OUTPUT_DIR / name)
+            fix_permissions(BUILD_DIR / name)
+            fix_permissions(INPUT_DIR)
+            fix_permissions(PROMETHEUS_OUTPUT_DIR)
+            fix_permissions(BUILD_DIR)
 
         succeeded.append(name)
         print(f"[gemm-dse] created {build}", flush=True)
