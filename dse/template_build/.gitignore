@@ -1,0 +1,38 @@
+# Ignore everything generated inside hls_project
+hls_project/*
+
+# Allow Git to traverse the new HLS component directory
+!hls_project/hls/
+hls_project/hls/*
+
+# Keep the main HLS log
+!hls_project/hls/hls.log
+
+# Keep synthesis reports
+!hls_project/hls/syn/
+hls_project/hls/syn/*
+
+!hls_project/hls/syn/report/
+hls_project/hls/syn/report/*
+
+!hls_project/hls/syn/report/*.rpt
+
+# Keep the top-level co-simulation report
+!hls_project/hls/sim/
+hls_project/hls/sim/*
+
+!hls_project/hls/sim/report/
+hls_project/hls/sim/report/*
+
+!hls_project/hls/sim/report/gemm_cosim.rpt
+
+# Other generated files
+vitis_hls.log
+
+_x*
+build_dir*
+gemm_host.exe
+v++_gemm*.log
+xcd.log
+.ipcache
+logs
